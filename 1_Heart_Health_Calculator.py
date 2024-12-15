@@ -688,6 +688,25 @@ if st.session_state.current_view:
             reduced_normal = normal_score
             reduced_sa = sa_score
 
+        # South Asians
+        np.random.seed(42)
+        sa_risk_scores = np.random.normal(28, 8, 8300)  # Mean ~28, std dev 8
+        sa_outcomes = np.random.binomial(1, 0.9, 8300) * sa_risk_scores + np.random.normal(5, 5, 8300)
+
+        # Non-South Asians
+        non_sa_risk_scores = np.random.normal(33, 10, 8300)  # Mean ~33, std dev 10
+        non_sa_outcomes = np.random.binomial(1, 0.2, 8300) * non_sa_risk_scores + np.random.normal(5, 10, 8300)
+
+        # data for South Asians
+        sa_bp = np.random.randint(90, 151, 500)  # BP between 90 and 150
+        sa_chol = np.random.randint(135, 301, 500)  # Cholesterol between 135 and 300
+        sa_risk = (0.003 * sa_bp * sa_chol / 100) + np.clip((sa_bp * 0.4 + sa_chol * 0.6) / 10, 0, 50)
+
+        # data for Non-South Asians
+        non_sa_bp = np.random.randint(90, 151, 500)  # BP between 90 and 150
+        non_sa_chol = np.random.randint(135, 301, 500)  # Cholesterol between 135 and 300
+        non_sa_risk = (0.002 * non_sa_bp * non_sa_chol / 100) + np.clip((non_sa_bp * 0.3 + non_sa_chol * 0.7) / 10, 0, 50)
+        
         if st.session_state.current_view == 'text':
             st.subheader("Risk Assessment Explanation")
             st.write(f"Your {risk_type} assessment shows:")
@@ -742,20 +761,8 @@ if st.session_state.current_view:
             import numpy as np
             import matplotlib.pyplot as plt
 
-            # Simulated data
-            np.random.seed(42)
-
-            # South Asians
-            sa_risk_scores = np.random.normal(28, 8, 8300)  # Mean ~28, std dev 8
-            sa_outcomes = np.random.binomial(1, 0.9, 8300) * sa_risk_scores + np.random.normal(5, 5, 8300)
-
-            # Non-South Asians
-            non_sa_risk_scores = np.random.normal(33, 10, 8300)  # Mean ~33, std dev 10
-            non_sa_outcomes = np.random.binomial(1, 0.2, 8300) * non_sa_risk_scores + np.random.normal(5, 10, 8300)
-
-            # "You" data point
-            you_risk_score = normal_score * 3  # Example low risk score
-            you_outcome = 30     # Example high frequency of negative outcomes
+            you_risk_score = normal_score * 3
+            you_outcome = 30
 
             # Function to plot histogram
             def plot_risk_histograms():
@@ -780,7 +787,6 @@ if st.session_state.current_view:
                 plt.hist(sa_risk_scores, bins=bins, alpha=0.6, color='blue', label="South Asians")
                 plt.hist(non_sa_risk_scores, bins=bins, alpha=0.6, color='orange', label="Non-South Asians")
                 
-                # Highlight "You" bucket
                 bucket_index = np.digitize(you_risk_score, bins) - 1
                 if bucket_index < len(bins) - 1:
                     plt.axvspan(bins[bucket_index], bins[bucket_index + 1], color='red', alpha=0.2, label="Your Bucket")
@@ -808,21 +814,6 @@ if st.session_state.current_view:
             import numpy as np
             import matplotlib.pyplot as plt
             import seaborn as sns
-
-            # Generate example data
-            np.random.seed(42)
-
-            # Simulated data for South Asians
-            sa_bp = np.random.randint(90, 151, 500)  # BP between 90 and 150
-            sa_chol = np.random.randint(135, 301, 500)  # Cholesterol between 135 and 300
-            # Gradually increase risk based on BP and cholesterol
-            sa_risk = (0.003 * sa_bp * sa_chol / 100) + np.clip((sa_bp * 0.4 + sa_chol * 0.6) / 10, 0, 50)
-
-            # Simulated data for Non-South Asians
-            non_sa_bp = np.random.randint(90, 151, 500)  # BP between 90 and 150
-            non_sa_chol = np.random.randint(135, 301, 500)  # Cholesterol between 135 and 300
-            # Gradually increase risk based on BP and cholesterol
-            non_sa_risk = (0.002 * non_sa_bp * non_sa_chol / 100) + np.clip((non_sa_bp * 0.3 + non_sa_chol * 0.7) / 10, 0, 50)
 
             # Scale the risk scores to a range of 0 to 50
             sa_risk = (sa_risk - sa_risk.min()) / (sa_risk.max() - sa_risk.min()) * 500
