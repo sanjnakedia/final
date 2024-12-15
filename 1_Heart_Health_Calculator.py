@@ -870,8 +870,8 @@ if st.session_state.current_view:
                     non_sa_heatmap_normalized[i, j] = 34 * non_sa_heatmap_normalized[i, j]
 
             # Define user input point
-            user_bp = 135
-            user_chol = 205
+            user_bp = metrics['bp_systolic']
+            user_chol = metrics['cholesterol_tot']
 
             # Adjust the layout
             plt.tight_layout()
