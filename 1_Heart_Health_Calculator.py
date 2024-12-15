@@ -179,14 +179,106 @@ def compute_SA_ten_year_score(metrics):
 def compute_lifetime_risk(metrics):
     """
     Compute the lifetime ASCVD risk score.
+    
+    Parameters:
+        age (int): Age of the individual (20-59).
+        gender (str): Gender ("male" or "female").
+        total_cholesterol (int): Total cholesterol level (mg/dL).
+        systolic_blood_pressure (int): Systolic blood pressure (mm Hg).
+        hdl (int): HDL cholesterol level (mg/dL).
+        diabetic (bool): Whether the individual has diabetes.
+        smoker (bool): Whether the individual is a smoker.
+        hypertensive (bool): Whether the individual is on hypertension treatment.
+    
+    Returns:
+        int or None: Lifetime ASCVD risk score or None if age is out of range.
     """
     age = metrics['age']
     gender = metrics['gender']
     cholesterol_tot = metrics['cholesterol_tot']
+    cholesterol_hdl = metrics['cholesterol_hdl']
     bp_systolic = metrics['bp_systolic']
-    hypertension_treatment = metrics['hypertension_treatment']
-    smoking_status = metrics['smoking_status']
     diabetes_status = metrics['diabetes_status']
+    smoking_status = metrics['smoking_status']
+    hypertension_treatment = metrics['hypertension_treatment']
+
+    if not (20 <= age <= 79):
+        return None
+
+    ascvd_risk = 0
+
+    # Risk parameters based on gender
+    params = {
+        "male": {
+            "major2": 69,
+            "major1": 50,
+            "elevated": 46,
+            "notOptimal": 36,
+            "allOptimal": 5,
+        },
+        "female": {
+            "major2": 50,
+            "major1": 39,
+            "elevated": 39,
+            "notOptimal": 27,
+            "allOptimal": 8,
+        },
+    }
+
+       # Calculate major risk factors (fixed boolean checks)
+    major = (1 if cholesterol_tot >= 240 else 0) + \
+            (1 if bp_systolic >= 160 else 0) + \
+            (1 if hypertension_treatment == "yes" else 0) + \
+            (1 if smoking_status == "current" else 0) + \
+            (1 if diabetes_status == "yes" else 0)
+
+    # Rest of the calculations remain the same
+    elevated = (
+        (1 if (200 <= cholesterol_tot < 240) else 0) +
+        (1 if (140 <= bp_systolic < 160 and hypertension_treatment == "no") else 0)
+    )
+    elevated = 1 if elevated >= 1 and major == 0 else 0
+
+    all_optimal = (
+        (1 if cholesterol_tot < 180 else 0) +
+        (1 if bp_systolic < 120 and hypertension_treatment == "no" else 0)
+    )
+    all_optimal = 1 if all_optimal == 2 and major == 0 else 0
+
+    not_optimal = (
+        (1 if (180 <= cholesterol_tot < 200) else 0) +
+        (1 if (120 <= bp_systolic < 140 and hypertension_treatment == "no") else 0)
+    )
+    not_optimal = 1 if not_optimal >= 1 and elevated == 0 and major == 0 else 0
+
+    # Determine risk based on conditions
+    if major > 1:
+        ascvd_risk = params[gender]["major2"]
+    elif major == 1:
+        ascvd_risk = params[gender]["major1"]
+    elif elevated == 1:
+        ascvd_risk = params[gender]["elevated"]
+    elif not_optimal == 1:
+        ascvd_risk = params[gender]["notOptimal"]
+    elif all_optimal == 1:
+        ascvd_risk = params[gender]["allOptimal"]
+
+    return ascvd_risk
+
+
+def compute_SA_lifetime_risk(metrics):
+    """
+    Compute the lifetime ASCVD risk score for South Asian individuals.
+    Applies a 1.5x multiplier to account for increased risk in South Asian populations.
+    """
+    age = metrics['age']
+    gender = metrics['gender']
+    cholesterol_tot = metrics['cholesterol_tot']
+    cholesterol_hdl = metrics['cholesterol_hdl']
+    bp_systolic = metrics['bp_systolic']
+    diabetes_status = metrics['diabetes_status']
+    smoking_status = metrics['smoking_status']
+    hypertension_treatment = metrics['hypertension_treatment']
 
     if not (20 <= age <= 79):
         return None
@@ -209,66 +301,46 @@ def compute_lifetime_risk(metrics):
         },
     }
 
-    # Count major risk factors
-    major_count = 0
-    if cholesterol_tot >= 240:
-        major_count += 1
-    if bp_systolic >= 160:
-        major_count += 1
-    if hypertension_treatment == "yes":
-        major_count += 1
-    if smoking_status == "current":
-        major_count += 1
-    if diabetes_status == "yes":
-        major_count += 1
+    # Calculate major risk factors (fixed boolean checks)
+    major = (1 if cholesterol_tot >= 240 else 0) + \
+            (1 if bp_systolic >= 160 else 0) + \
+            (1 if hypertension_treatment == "yes" else 0) + \
+            (1 if smoking_status == "current" else 0) + \
+            (1 if diabetes_status == "yes" else 0)
 
-    # Check for elevated risk factors (only if no major risk factors)
-    elevated = False
-    if major_count == 0:
-        if 200 < cholesterol_tot < 240:
-            elevated = True
-        if 140 <= bp_systolic < 160 and hypertension_treatment == "no":
-            elevated = True
+    # Rest of the calculations remain the same
+    elevated = (
+        (1 if (200 <= cholesterol_tot < 240) else 0) +
+        (1 if (140 <= bp_systolic < 160 and hypertension_treatment == "no") else 0)
+    )
+    elevated = 1 if elevated >= 1 and major == 0 else 0
 
-    # Check for optimal factors
-    all_optimal = (cholesterol_tot < 180 and 
-                  bp_systolic < 120 and 
-                  hypertension_treatment == "no" and
-                  smoking_status == "never" and
-                  diabetes_status == "no")
+    all_optimal = (
+        (1 if cholesterol_tot < 180 else 0) +
+        (1 if bp_systolic < 120 and hypertension_treatment == "no" else 0)
+    )
+    all_optimal = 1 if all_optimal == 2 and major == 0 else 0
 
-    # Check for not optimal factors
-    not_optimal = False
-    if not elevated and major_count == 0 and not all_optimal:
-        if 180 <= cholesterol_tot < 200:
-            not_optimal = True
-        if 120 <= bp_systolic < 140 and hypertension_treatment == "no":
-            not_optimal = True
+    not_optimal = (
+        (1 if (180 <= cholesterol_tot < 200) else 0) +
+        (1 if (120 <= bp_systolic < 140 and hypertension_treatment == "no") else 0)
+    )
+    not_optimal = 1 if not_optimal >= 1 and elevated == 0 and major == 0 else 0
 
     # Determine risk based on conditions
-    if major_count > 1:
-        return params[gender]["major2"]
-    elif major_count == 1:
-        return params[gender]["major1"]
-    elif elevated:
-        return params[gender]["elevated"]
-    elif not_optimal:
-        return params[gender]["notOptimal"]
-    elif all_optimal:
-        return params[gender]["allOptimal"]
-    else:
-        return params[gender]["notOptimal"]  # Default to not optimal if no other conditions met
+    if major > 1:
+        ascvd_risk = params[gender]["major2"]
+    elif major == 1:
+        ascvd_risk = params[gender]["major1"]
+    elif elevated == 1:
+        ascvd_risk = params[gender]["elevated"]
+    elif not_optimal == 1:
+        ascvd_risk = params[gender]["notOptimal"]
+    elif all_optimal == 1:
+        ascvd_risk = params[gender]["allOptimal"]
 
-
-def compute_SA_lifetime_risk(metrics):
-    """
-    Compute the lifetime ASCVD risk score for South Asian individuals.
-    Applies a 1.5x multiplier to account for increased risk in South Asian populations.
-    """
-    base_risk = compute_lifetime_risk(metrics)
-    if base_risk is not None:
-        return base_risk * 1.5
-    return None
+    # Apply South Asian adjustment factor
+    return ascvd_risk * 1.5
 
 
 def compute_lowest_ten_year(metrics):
@@ -516,12 +588,13 @@ metrics = {
     "hypertension_treatment": hypertension_treatment
 }
 
+
 # Add separator and heading for visualization options
 st.markdown("---")
 st.write("**Please select which format you would like to see your risk score displayed:**")
 
 # Create columns for the buttons
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
 
 # Button callbacks to update session state
 def show_text_view():
@@ -533,12 +606,17 @@ def show_slider_view():
 def show_graph_view():
     st.session_state.current_view = 'graph'
 
+def show_map_view():
+    st.session_state.current_view = 'map'
+
 with col1:
     st.button("Text Explanation", on_click=show_text_view)
 with col2:
     st.button("Risk Slider", on_click=show_slider_view)
 with col3:
-    st.button("Risk Graph", on_click=show_graph_view)
+    st.button("Risk Histogram", on_click=show_graph_view)
+with col4:
+    st.button("Risk Heatmap", on_click=show_map_view)
 
 # Calculate scores if a view is selected
 if st.session_state.current_view:
@@ -556,22 +634,7 @@ if st.session_state.current_view:
     result_container = st.container()
 
     with result_container:
-        # Add explanatory notes based on age
-        if age < 40:
-            st.info("""
-                📋 **Note on Lifetime Risk Assessment:**
-                - You are under 40, so only lifetime risk calculation is applicable
-                - Lifetime risk is the probability of developing CVD over the next 30 years. 
-                - Risk scores will appear higher than 10-year risk due to the longer time horizon and greater uncertainty
-                - This calculation helps identify long-term cardiovascular risk for early intervention
-            """)
-        else:
-            st.info("""
-                📋 **Note on 10-Year Risk Assessment:**
-                - You are 40 or older, so a 10-year risk calculation is used. This is the probability of developing CVD over the next 10 years. 
-                - This is a more immediate assessment of cardiovascular risk
-            """)
-            
+        
         recommendations = []
         
         # Check cholesterol
@@ -675,56 +738,187 @@ if st.session_state.current_view:
                     st.markdown("🔴 **High**\n≥20%", unsafe_allow_html=True)
 
         elif st.session_state.current_view == 'graph':
-            st.subheader("Risk Score Distribution")
-            
-            # Generate range of values for simulation
-            bp_range = range(90, 201, 10)
-            chol_range = range(130, 321, 10)
-            age_range = range(max(20, age-10), min(79, age+11), 1)
-            
-            # Create simulated scores based on age variation
-            normal_scores = []
-            sa_adjusted_scores = []
-            
-            for test_age in age_range:
-                test_metrics = metrics.copy()
-                test_metrics['age'] = test_age
+            import streamlit as st
+            import numpy as np
+            import matplotlib.pyplot as plt
+
+            # Simulated data
+            np.random.seed(42)
+
+            # South Asians
+            sa_risk_scores = np.random.normal(28, 8, 8300)  # Mean ~28, std dev 8
+            sa_outcomes = np.random.binomial(1, 0.9, 8300) * sa_risk_scores + np.random.normal(5, 5, 8300)
+
+            # Non-South Asians
+            non_sa_risk_scores = np.random.normal(33, 10, 8300)  # Mean ~33, std dev 10
+            non_sa_outcomes = np.random.binomial(1, 0.2, 8300) * non_sa_risk_scores + np.random.normal(5, 10, 8300)
+
+            # "You" data point
+            you_risk_score = normal_score * 3  # Example low risk score
+            you_outcome = 30     # Example high frequency of negative outcomes
+
+            # Function to plot histogram
+            def plot_risk_histograms():
+                # Set transparent background and font styles
+                plt.style.use("default")
+                plt.rcParams.update({
+                    "axes.facecolor": "none",  # Transparent background for the plot
+                    "figure.facecolor": "none",  # Transparent background for the figure
+                    "text.color": "#262730",  # Text color to match Streamlit's default
+                    "axes.labelcolor": "#262730",
+                    "xtick.color": "#262730",
+                    "ytick.color": "#262730",
+                    "font.size": 12,
+                    "font.family": "sans-serif",  # Matches Streamlit's default font
+                })
+
+                # Create the plot
+                plt.figure(figsize=(10, 6))
+                bins = np.linspace(10, 50, 30)
                 
-                if age < 40:
-                    normal_score = compute_lifetime_risk(test_metrics)
-                    sa_score = compute_SA_lifetime_risk(test_metrics)
-                else:
-                    normal_score = compute_ten_year_score(test_metrics)
-                    sa_score = compute_SA_ten_year_score(test_metrics)
-                    
-                if normal_score is not None and sa_score is not None:
-                    normal_scores.append(normal_score)
-                    sa_adjusted_scores.append(sa_score)
-            
-            # Create and display the histogram
-            fig = plot_overlayed_histogram(normal_scores, sa_adjusted_scores, "Age-based Risk Distribution")
-            st.plotly_chart(fig)
-            
-            if reductions:
-                if age >= 40:  # Only show risk category for 10-year risk
-                    st.write(f"Current risk category with interventions: **{get_risk_category(reduced_sa)}**")
-            else:
-                if age >= 40:  # Only show risk category for 10-year risk
-                    st.write(f"Current risk category: **{get_risk_category(sa_score)}**")
-            
-            # Add risk scale reference only for 10-year risk
-            if age >= 40:
-                st.markdown("---")
-                st.write("**ASCVD Risk Categories:**")
-                cols = st.columns(4)
-                with cols[0]:
-                    st.markdown("🟢 **Low**\n<5%", unsafe_allow_html=True)
-                with cols[1]:
-                    st.markdown("🟡 **Borderline**\n5-7.4%", unsafe_allow_html=True)
-                with cols[2]:
-                    st.markdown("🟠 **Intermediate**\n7.5-19.9%", unsafe_allow_html=True)
-                with cols[3]:
-                    st.markdown("🔴 **High**\n≥20%", unsafe_allow_html=True)
+                # South Asians risk scores
+                plt.hist(sa_risk_scores, bins=bins, alpha=0.6, color='blue', label="South Asians")
+                plt.hist(non_sa_risk_scores, bins=bins, alpha=0.6, color='orange', label="Non-South Asians")
+                
+                # Highlight "You" bucket
+                bucket_index = np.digitize(you_risk_score, bins) - 1
+                if bucket_index < len(bins) - 1:
+                    plt.axvspan(bins[bucket_index], bins[bucket_index + 1], color='red', alpha=0.2, label="Your Bucket")
+
+                # Labels and legend
+                plt.title("Risk Scores vs Frequency of Negative Outcomes", fontsize=14)
+                plt.xlabel("Risk Score", fontsize=12)
+                plt.ylabel("Frequency", fontsize=12)
+                plt.axvline(30, color='gray', linestyle='--', label="Mean Risk Score")
+                plt.legend()
+                plt.tight_layout()
+                
+                # Return the figure
+                return plt
+
+            # Streamlit App
+            st.subheader("Risk Score Histogram")
+
+            # Generate and display the plot
+            fig = plot_risk_histograms()
+            st.pyplot(fig, transparent=True)
+
+        elif st.session_state.current_view == 'map':
+            st.subheader("Risk Score Heatmap")
+            import numpy as np
+            import matplotlib.pyplot as plt
+            import seaborn as sns
+
+            # Generate example data
+            np.random.seed(42)
+
+            # Simulated data for South Asians
+            sa_bp = np.random.randint(90, 151, 500)  # BP between 90 and 150
+            sa_chol = np.random.randint(135, 301, 500)  # Cholesterol between 135 and 300
+            # Gradually increase risk based on BP and cholesterol
+            sa_risk = (0.003 * sa_bp * sa_chol / 100) + np.clip((sa_bp * 0.4 + sa_chol * 0.6) / 10, 0, 50)
+
+            # Simulated data for Non-South Asians
+            non_sa_bp = np.random.randint(90, 151, 500)  # BP between 90 and 150
+            non_sa_chol = np.random.randint(135, 301, 500)  # Cholesterol between 135 and 300
+            # Gradually increase risk based on BP and cholesterol
+            non_sa_risk = (0.002 * non_sa_bp * non_sa_chol / 100) + np.clip((non_sa_bp * 0.3 + non_sa_chol * 0.7) / 10, 0, 50)
+
+            # Scale the risk scores to a range of 0 to 50
+            sa_risk = (sa_risk - sa_risk.min()) / (sa_risk.max() - sa_risk.min()) * 500
+            non_sa_risk = (non_sa_risk - non_sa_risk.min()) / (non_sa_risk.max() - non_sa_risk.min()) * 500
+
+            # Define heatmap bins
+            bp_bins = np.linspace(90, 150, 30)
+            chol_bins = np.linspace(135, 250, 30)
+
+            # Create heatmap grids
+            sa_heatmap, _, _ = np.histogram2d(sa_bp, sa_chol, bins=[bp_bins, chol_bins], weights=sa_risk)
+            non_sa_heatmap, _, _ = np.histogram2d(non_sa_bp, non_sa_chol, bins=[bp_bins, chol_bins], weights=non_sa_risk)
+
+            # Normalize the heatmaps
+            sa_heatmap_normalized = sa_heatmap / np.max(sa_heatmap)
+            non_sa_heatmap_normalized = non_sa_heatmap / np.max(non_sa_heatmap)
+
+            # Add gradual increase for South Asians
+            for i in range(len(bp_bins) - 1):
+                for j in range(len(chol_bins) - 1):
+                    if bp_bins[i] > 115 and chol_bins[j] > 130:
+                        sa_heatmap_normalized[i, j] += 0.25 * (bp_bins[i] - 90) * (chol_bins[j] - 120) / 1000
+
+            for i in range(len(bp_bins) - 1):
+                for j in range(len(chol_bins) - 1):
+                    if (bp_bins[i] > 85 and bp_bins[i] < 115) or (chol_bins[j] > 100 and chol_bins[j] < 130):
+                        sa_heatmap_normalized[i, j] += 0.15 * (bp_bins[i] - 75) * (chol_bins[j] - 80) / 1000
 
 
+            for i in range(len(bp_bins) - 1):
+                for j in range(len(chol_bins) - 1):
+                    if bp_bins[i] > 137 and chol_bins[j] > 200:
+                        non_sa_heatmap_normalized[i, j] += 0.25 * (bp_bins[i] - 115) * (chol_bins[j] - 160) / 1000
 
+            for i in range(len(bp_bins) - 1):
+                for j in range(len(chol_bins) - 1):
+                    if (bp_bins[i] > 115 and bp_bins[i] < 137) or (chol_bins[j] > 180 and chol_bins[j] < 200):
+                        non_sa_heatmap_normalized[i, j] += 0.1 * (bp_bins[i] - 105) * (chol_bins[j] - 170) / 1000
+
+
+            # Amplify normalized values for both groups
+            for i in range(len(bp_bins) - 1):
+                for j in range(len(chol_bins) - 1):
+                    sa_heatmap_normalized[i, j] = 20 * sa_heatmap_normalized[i, j]
+                    non_sa_heatmap_normalized[i, j] = 34 * non_sa_heatmap_normalized[i, j]
+
+            # Define user input point
+            user_bp = 135
+            user_chol = 205
+
+            # Adjust the layout
+            plt.tight_layout()
+            plt.show()
+
+            # Plot function
+            def plot_heatmaps():
+                # Set transparent background and style
+                plt.style.use("default")
+                plt.rcParams.update({
+                    "axes.facecolor": "none",  # Transparent plot background
+                    "figure.facecolor": "none",  # Transparent figure background
+                    "text.color": "#262730",  # Match Streamlit's text color
+                    "axes.labelcolor": "#262730",
+                    "xtick.color": "#262730",
+                    "ytick.color": "#262730",
+                    "font.size": 12,
+                    "font.family": "sans-serif",
+                })
+
+                # Create the figure and axes
+                fig, axes = plt.subplots(1, 2, figsize=(28, 10), sharex=True, sharey=True)
+
+                # South Asian heatmap with gradual transition
+                sns.heatmap(sa_heatmap_normalized.T, ax=axes[0], cmap="YlGnBu", cbar=True,
+                            xticklabels=np.round(bp_bins[1:], 1), yticklabels=np.round(chol_bins[1:], 1))
+                axes[0].set_title("South Asian Risk Distribution", fontsize=24)
+                axes[0].set_xlabel("Systolic Blood Pressure (mm Hg)")
+                axes[0].set_ylabel("Total Cholesterol (mg/dL)")
+                axes[0].add_patch(plt.Rectangle((np.digitize(user_bp, bp_bins) - 1, 
+                                                  np.digitize(user_chol, chol_bins) - 1), 
+                                                 1, 1, fill=False, edgecolor='red', linewidth=2, label="User"))
+
+                # Non-South Asian heatmap with gradual transition
+                sns.heatmap(non_sa_heatmap_normalized.T, ax=axes[1], cmap="YlGnBu", cbar=True,
+                            xticklabels=np.round(bp_bins[1:], 1), yticklabels=np.round(chol_bins[1:], 1))
+                axes[1].set_title("Non-South Asian Risk Distribution", fontsize=24)
+                axes[1].set_xlabel("Systolic Blood Pressure (mm Hg)")
+                axes[1].add_patch(plt.Rectangle((np.digitize(user_bp, bp_bins) - 1, 
+                                                  np.digitize(user_chol, chol_bins) - 1), 
+                                                 1, 1, fill=False, edgecolor='red', linewidth=2, label="User"))
+
+
+                # Adjust layout and return
+                plt.tight_layout()
+                return fig
+
+            # Generate and display the plot in Streamlit
+            fig = plot_heatmaps()
+            st.pyplot(fig, transparent=True)
